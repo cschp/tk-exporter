@@ -1,0 +1,152 @@
+defmodule TkExport do
+  require Logger
+
+  @sleep 500
+
+  def export(user_id, cookie) when is_binary(user_id) and is_binary(cookie) do
+    campaign_data(user_id) |> Enum.map(&campaign_export/1)
+  end
+
+  def request() do
+    Req.new(base_url: "https://www.tavern-keeper.com")
+    |> Req.Request.put_header("accept", "application/json")
+    |> Req.Request.put_header("cookie", "tavern-keeper=#{System.get_env("TK_COOKIE")}")
+    |> Req.Request.put_header("X-CSRF-Token", "something")
+  end
+
+  defp campaign_export(campaign) do
+    Logger.info("Exporting Campaign #{campaign["id"]}")
+    c =
+    %{
+      id: campaign["id"],
+      system_name: campaign["system_name"],
+      name: campaign["name"]
+    }
+    |> characters_export()
+    |> scenes_export()
+
+    path = "#{c.name}.json"
+    if File.exists?(path), do: File.rm!(path)
+    json = Jason.encode!(c)
+    File.write(path, json)
+    c
+  end
+
+  defp characters_export(campaign) do
+    characters =
+    campaign_character_data(campaign)
+    |> Enum.map(fn x ->
+      Process.sleep(@sleep)
+      character_export(x["id"])
+    end)
+    Map.put(campaign, :characters, characters)
+  end
+
+  defp character_export(character_id) do
+    Logger.info("Exporting Character #{character_id}")
+    data = character_data(character_id)
+    %{
+      id: data["id"],
+      name: data["name"],
+      concept: data["concept"],
+      quote: data["quote"],
+      nickname: data["nickname"],
+      sheet: data["sheet"]["data"]["character"],
+      bio: %{
+        background: data["biography"]["background"],
+        personality: data["biography"]["personality"],
+        appearance: data["biography"]["appearance"]
+      }
+    }
+  end
+
+  defp scenes_export(campaign) do
+    scenes =
+      campaign_roleplay_data(campaign)
+    |> Enum.map(fn x ->
+      Logger.info("Exporting Scene - #{x["id"]}")
+      Process.sleep(@sleep)
+      %{
+        name: x["name"],
+        messages: scene_messages_export(x["id"])
+      }
+
+    end)
+    Map.put(campaign, :scenes, scenes)
+  end
+
+  defp scene_messages_export(scene_id) do
+    roleplay_message_data(scene_id)
+    |> Enum.map(fn x ->
+      %{
+        content: x["content"],
+        character: x["character"]["name"]
+      }
+
+    end)
+  end
+
+  def campaign_data(user_id) do
+    request()
+    |> Req.get!(url: "/api_v0/users/#{user_id}/campaigns")
+    |> Map.get(:body)
+    |> Map.get("campaigns")
+  end
+  def campaign_character_data(campaign, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
+
+    request_data =
+    request()
+    |> Req.get!(url: "/api_v0/campaigns/#{campaign.id}/characters?page=#{page}")
+    |> Map.get(:body)
+
+    if request_data["page"] >= request_data["pages"] do
+      data ++ request_data["characters"]
+    else
+      Process.sleep(@sleep)
+      campaign_character_data(campaign, [page: page + 1, data: data ++ request_data["characters"]])
+    end
+  end
+
+  def campaign_roleplay_data(campaign, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
+
+    request_data =
+    request()
+    |> Req.get!(url: "/api_v0/campaigns/#{campaign.id}/roleplays?page=#{page}")
+    |> Map.get(:body)
+
+    if request_data["page"] >= request_data["pages"] do
+      data ++ request_data["roleplays"]
+    else
+      Process.sleep(@sleep)
+      campaign_roleplay_data(campaign, [page: page + 1, data: data ++ request_data["roleplays"]])
+    end
+  end
+  def roleplay_message_data(roleplay_id, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
+
+    request_data =
+    request()
+    |> Req.get!(url: "/api_v0/roleplays/#{roleplay_id}/messages?page=#{page}")
+    |> Map.get(:body)
+
+    if request_data["page"] >= request_data["pages"] do
+      data ++ request_data["messages"]
+    else
+      Process.sleep(@sleep)
+      roleplay_message_data(roleplay_id, [page: page + 1, data: data ++ request_data["messages"]])
+    end
+  end
+
+
+  def character_data(character_id) do
+    request()
+    |> Req.get!(url: "/api_v0/characters/#{character_id}")
+    |> Map.get(:body)
+  end
+
+end
