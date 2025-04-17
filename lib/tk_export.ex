@@ -80,7 +80,9 @@ defmodule TkExport do
     |> Enum.map(fn x ->
       %{
         content: x["content"],
-        character: x["character"]["name"]
+        character: x["character"]["name"],
+        roll: x["roll"],
+        comments: (if x["comment_count"] == 0, do: [], else: roleplay_message_comments_data(scene_id, x["id"]) |> Enum.map(fn x  -> %{name: x["user"]["name"], content: x["content"]} end) )
       }
 
     end)
@@ -139,6 +141,22 @@ defmodule TkExport do
     else
       Process.sleep(@sleep)
       roleplay_message_data(roleplay_id, [page: page + 1, data: data ++ request_data["messages"]])
+    end
+  end
+  def roleplay_message_comments_data(roleplay_id, message_id, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
+
+    request_data =
+    request()
+    |> Req.get!(url: "/api_v0/roleplays/#{roleplay_id}/messages/#{message_id}/comments?page=#{page}")
+    |> Map.get(:body)
+
+    if request_data["page"] >= request_data["pages"] do
+      data ++ request_data["comments"]
+    else
+      Process.sleep(@sleep)
+      roleplay_message_comments_data(roleplay_id, [page: page + 1, data: data ++ request_data["comments"]])
     end
   end
 
