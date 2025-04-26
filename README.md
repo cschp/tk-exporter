@@ -1,4 +1,4 @@
-# tk-export
+# tk-exporter
 
 A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) before it shuts down.
 
@@ -22,8 +22,8 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
 
 2. Clone this repository:
    ```bash
-   git clone https://github.com/cschp/tk-export.git
-   cd tk-export
+   git clone https://github.com/cschp/tk-exporter.git
+   cd tk-exporter
    ```
 
 3. Build the executable:
@@ -33,7 +33,7 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
 
 4. Run the executable:
    ```bash
-   ./tk_export
+   ./tk_exporter
    ```
 
 ### Windows
@@ -41,8 +41,8 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
 
 2. Clone this repository:
    ```bash
-   git clone https://github.com/cschp/tk-export.git
-   cd tk-export
+   git clone https://github.com/cschp/tk-exporter.git
+   cd tk-exporter
    ```
 
 3. Build the executable:
@@ -52,7 +52,7 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
 
 4. Run the executable:
    ```bash
-   tk_export
+   tk_exporter
    ```
 
 ## Usage

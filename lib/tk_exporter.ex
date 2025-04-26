@@ -1,6 +1,6 @@
-defmodule TkExport do
+defmodule TkExporter do
   require Logger
-  alias TkExport.Application
+  alias TkExporter.Application
 
   @moduledoc """
   A tool to export data from Tavern-Keeper before it shuts down.
