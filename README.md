@@ -22,7 +22,7 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
 
 2. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/tk-export.git
+   git clone https://github.com/cschp/tk-export.git
    cd tk-export
    ```
 
@@ -41,7 +41,7 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
 
 2. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/tk-export.git
+   git clone https://github.com/cschp/tk-export.git
    cd tk-export
    ```
 
