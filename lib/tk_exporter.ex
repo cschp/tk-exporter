@@ -1,7 +1,6 @@
 defmodule TkExporter do
   require Logger
   alias TkExporter.Application
-  import Retry
 
   @moduledoc """
   A tool to export data from Tavern-Keeper before it shuts down.
@@ -132,14 +131,14 @@ defmodule TkExporter do
 
   defp retry_request(fun) do
     config = Application.config()
-    Retry.retry(
+    Retry.retry_while(
       with: Retry.DelayStreams.linear_backoff(config[:retry_delay], 2) |> Retry.DelayStreams.cap(config[:retry_delay] * 4) |> Stream.take(config[:max_retries]),
       rescue_only: [RuntimeError]
     ) do
       case fun.() do
-        {:ok, result} -> {:ok, result}
-        {:error, error} -> {:error, error}
-        result -> {:ok, result}
+        {:ok, result} -> {:halt, {:ok, result}}
+        {:error, error} -> {:cont, {:error, error}}
+        result -> {:halt, {:ok, result}}
       end
     end
   end
