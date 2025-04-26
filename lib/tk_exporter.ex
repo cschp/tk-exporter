@@ -1,5 +1,6 @@
 defmodule TkExporter do
   require Logger
+  require Retry
   alias TkExporter.Application
 
   @moduledoc """
