@@ -133,7 +133,7 @@ defmodule TkExporter do
   defp retry_request(fun) do
     config = Application.config()
     Retry.retry(
-      with: linear_backoff(config[:retry_delay], 2) |> cap(config[:retry_delay] * 4) |> Stream.take(config[:max_retries]),
+      with: Retry.DelayStreams.linear_backoff(config[:retry_delay], 2) |> Retry.DelayStreams.cap(config[:retry_delay] * 4) |> Stream.take(config[:max_retries]),
       rescue_only: [RuntimeError]
     ) do
       case fun.() do
