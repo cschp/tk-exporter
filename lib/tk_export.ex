@@ -1,170 +1,239 @@
 defmodule TkExport do
   require Logger
+  alias TkExport.Application
 
-  @sleep 500
+  @moduledoc """
+  A tool to export data from Tavern-Keeper before it shuts down.
+  """
 
+  @doc """
+  Exports all data for a given user ID and cookie.
+  """
   def export(user_id, cookie) when is_binary(user_id) and is_binary(cookie) do
-    campaign_data(user_id) |> Enum.map(&campaign_export/1)
+    config = Application.config()
+    output_dir = config[:output_dir]
+    File.mkdir_p!(output_dir)
+
+    Logger.info("Starting export for user #{user_id}")
+    
+    campaigns = campaign_data(user_id)
+    total_campaigns = length(campaigns)
+    
+    Logger.info("Found #{total_campaigns} campaigns to export")
+    
+    campaigns
+    |> Enum.with_index(1)
+    |> Enum.map(fn {campaign, index} ->
+      Logger.info("[#{index}/#{total_campaigns}] Exporting Campaign #{campaign["id"]}")
+      campaign_export(campaign)
+    end)
   end
 
-  def request() do
-    Req.new(base_url: "https://www.tavern-keeper.com")
+  defp request do
+    Req.new(base_url: Application.config()[:base_url])
     |> Req.Request.put_header("accept", "application/json")
     |> Req.Request.put_header("cookie", "tavern-keeper=#{System.get_env("TK_COOKIE")}")
     |> Req.Request.put_header("X-CSRF-Token", "something")
   end
 
   defp campaign_export(campaign) do
-    Logger.info("Exporting Campaign #{campaign["id"]}")
+    config = Application.config()
+    
     c =
-    %{
-      id: campaign["id"],
-      system_name: campaign["system_name"],
-      name: campaign["name"]
-    }
-    |> characters_export()
-    |> scenes_export()
+      %{
+        id: campaign["id"],
+        system_name: campaign["system_name"],
+        name: campaign["name"]
+      }
+      |> characters_export()
+      |> scenes_export()
 
-    path = "#{c.name}.json"
-    if File.exists?(path), do: File.rm!(path)
-    json = Jason.encode!(c)
-    File.write(path, json)
+    path = Path.join(config[:output_dir], "#{c.name}.json")
+    json = Jason.encode!(c, pretty: true)
+    File.write!(path, json)
     c
   end
 
   defp characters_export(campaign) do
-    characters =
-    campaign_character_data(campaign)
-    |> Enum.map(fn x ->
-      Process.sleep(@sleep)
-      character_export(x["id"])
+    characters = campaign_character_data(campaign)
+    total_characters = length(characters)
+    
+    Logger.info("Exporting #{total_characters} characters for campaign #{campaign.id}")
+    
+    characters
+    |> Enum.with_index(1)
+    |> Enum.map(fn {character, index} ->
+      Logger.info("[#{index}/#{total_characters}] Exporting Character #{character["id"]}")
+      Process.sleep(Application.config()[:sleep_delay])
+      character_export(character["id"])
     end)
-    Map.put(campaign, :characters, characters)
+    |> then(fn characters -> Map.put(campaign, :characters, characters) end)
   end
 
   defp character_export(character_id) do
-    Logger.info("Exporting Character #{character_id}")
-    data = character_data(character_id)
-    %{
-      id: data["id"],
-      name: data["name"],
-      concept: data["concept"],
-      quote: data["quote"],
-      nickname: data["nickname"],
-      sheet: data["sheet"]["data"]["character"],
-      bio: %{
-        background: data["biography"]["background"],
-        personality: data["biography"]["personality"],
-        appearance: data["biography"]["appearance"]
+    with {:ok, data} <- retry_request(fn -> character_data(character_id) end) do
+      %{
+        id: data["id"],
+        name: data["name"],
+        concept: data["concept"],
+        quote: data["quote"],
+        nickname: data["nickname"],
+        sheet: data["sheet"]["data"]["character"],
+        bio: %{
+          background: data["biography"]["background"],
+          personality: data["biography"]["personality"],
+          appearance: data["biography"]["appearance"]
+        }
       }
-    }
+    end
   end
 
   defp scenes_export(campaign) do
-    scenes =
-      campaign_roleplay_data(campaign)
-    |> Enum.map(fn x ->
-      Logger.info("Exporting Scene - #{x["id"]}")
-      Process.sleep(@sleep)
+    scenes = campaign_roleplay_data(campaign)
+    total_scenes = length(scenes)
+    
+    Logger.info("Exporting #{total_scenes} scenes for campaign #{campaign.id}")
+    
+    scenes
+    |> Enum.with_index(1)
+    |> Enum.map(fn {scene, index} ->
+      Logger.info("[#{index}/#{total_scenes}] Exporting Scene #{scene["id"]}")
+      Process.sleep(Application.config()[:sleep_delay])
       %{
-        name: x["name"],
-        messages: scene_messages_export(x["id"])
+        name: scene["name"],
+        messages: scene_messages_export(scene["id"])
       }
-
     end)
-    Map.put(campaign, :scenes, scenes)
+    |> then(fn scenes -> Map.put(campaign, :scenes, scenes) end)
   end
 
   defp scene_messages_export(scene_id) do
     roleplay_message_data(scene_id)
-    |> Enum.map(fn x ->
+    |> Enum.map(fn message ->
       %{
-        content: x["content"],
-        character: x["character"]["name"],
-        roll: x["roll"],
-        comments: (if x["comment_count"] == 0, do: [], else: roleplay_message_comments_data(scene_id, x["id"]) |> Enum.map(fn x  -> %{name: x["user"]["name"], content: x["content"]} end) )
+        content: message["content"],
+        character: message["character"]["name"],
+        roll: message["roll"],
+        comments: if message["comment_count"] == 0 do
+          []
+        else
+          roleplay_message_comments_data(scene_id, message["id"])
+          |> Enum.map(fn comment -> 
+            %{
+              name: comment["user"]["name"],
+              content: comment["content"]
+            }
+          end)
+        end
       }
-
     end)
   end
 
-  def campaign_data(user_id) do
-    request()
-    |> Req.get!(url: "/api_v0/users/#{user_id}/campaigns")
-    |> Map.get(:body)
-    |> Map.get("campaigns")
-  end
-  def campaign_character_data(campaign, options \\ []) do
-    page = Keyword.get(options, :page, 1)
-    data = Keyword.get(options, :data, [])
-
-    request_data =
-    request()
-    |> Req.get!(url: "/api_v0/campaigns/#{campaign.id}/characters?page=#{page}")
-    |> Map.get(:body)
-
-    if request_data["page"] >= request_data["pages"] do
-      data ++ request_data["characters"]
-    else
-      Process.sleep(@sleep)
-      campaign_character_data(campaign, [page: page + 1, data: data ++ request_data["characters"]])
+  defp retry_request(fun) do
+    config = Application.config()
+    Retry.retry(
+      with: linear_backoff(config[:retry_delay], 2) |> cap(config[:retry_delay] * 4) |> Stream.take(config[:max_retries]),
+      rescue_only: [RuntimeError]
+    ) do
+      case fun.() do
+        {:ok, result} -> {:ok, result}
+        {:error, error} -> {:error, error}
+        result -> {:ok, result}
+      end
     end
   end
 
-  def campaign_roleplay_data(campaign, options \\ []) do
-    page = Keyword.get(options, :page, 1)
-    data = Keyword.get(options, :data, [])
-
-    request_data =
-    request()
-    |> Req.get!(url: "/api_v0/campaigns/#{campaign.id}/roleplays?page=#{page}")
-    |> Map.get(:body)
-
-    if request_data["page"] >= request_data["pages"] do
-      data ++ request_data["roleplays"]
-    else
-      Process.sleep(@sleep)
-      campaign_roleplay_data(campaign, [page: page + 1, data: data ++ request_data["roleplays"]])
-    end
-  end
-  def roleplay_message_data(roleplay_id, options \\ []) do
-    page = Keyword.get(options, :page, 1)
-    data = Keyword.get(options, :data, [])
-
-    request_data =
-    request()
-    |> Req.get!(url: "/api_v0/roleplays/#{roleplay_id}/messages?page=#{page}")
-    |> Map.get(:body)
-
-    if request_data["page"] >= request_data["pages"] do
-      data ++ request_data["messages"]
-    else
-      Process.sleep(@sleep)
-      roleplay_message_data(roleplay_id, [page: page + 1, data: data ++ request_data["messages"]])
-    end
-  end
-  def roleplay_message_comments_data(roleplay_id, message_id, options \\ []) do
-    page = Keyword.get(options, :page, 1)
-    data = Keyword.get(options, :data, [])
-
-    request_data =
-    request()
-    |> Req.get!(url: "/api_v0/roleplays/#{roleplay_id}/messages/#{message_id}/comments?page=#{page}")
-    |> Map.get(:body)
-
-    if request_data["page"] >= request_data["pages"] do
-      data ++ request_data["comments"]
-    else
-      Process.sleep(@sleep)
-      roleplay_message_comments_data(roleplay_id, [page: page + 1, data: data ++ request_data["comments"]])
+  defp campaign_data(user_id) do
+    with {:ok, response} <- retry_request(fn -> 
+      request()
+      |> Req.get(url: "/api_v0/users/#{user_id}/campaigns")
+    end) do
+      response.body["campaigns"]
     end
   end
 
+  defp campaign_character_data(campaign, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
 
-  def character_data(character_id) do
-    request()
-    |> Req.get!(url: "/api_v0/characters/#{character_id}")
-    |> Map.get(:body)
+    with {:ok, response} <- retry_request(fn ->
+      request()
+      |> Req.get(url: "/api_v0/campaigns/#{campaign.id}/characters?page=#{page}")
+    end) do
+      request_data = response.body
+
+      if request_data["page"] >= request_data["pages"] do
+        data ++ request_data["characters"]
+      else
+        Process.sleep(Application.config()[:sleep_delay])
+        campaign_character_data(campaign, [page: page + 1, data: data ++ request_data["characters"]])
+      end
+    end
   end
 
+  defp campaign_roleplay_data(campaign, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
+
+    with {:ok, response} <- retry_request(fn ->
+      request()
+      |> Req.get(url: "/api_v0/campaigns/#{campaign.id}/roleplays?page=#{page}")
+    end) do
+      request_data = response.body
+
+      if request_data["page"] >= request_data["pages"] do
+        data ++ request_data["roleplays"]
+      else
+        Process.sleep(Application.config()[:sleep_delay])
+        campaign_roleplay_data(campaign, [page: page + 1, data: data ++ request_data["roleplays"]])
+      end
+    end
+  end
+
+  defp roleplay_message_data(roleplay_id, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
+
+    with {:ok, response} <- retry_request(fn ->
+      request()
+      |> Req.get(url: "/api_v0/roleplays/#{roleplay_id}/messages?page=#{page}")
+    end) do
+      request_data = response.body
+
+      if request_data["page"] >= request_data["pages"] do
+        data ++ request_data["messages"]
+      else
+        Process.sleep(Application.config()[:sleep_delay])
+        roleplay_message_data(roleplay_id, [page: page + 1, data: data ++ request_data["messages"]])
+      end
+    end
+  end
+
+  defp roleplay_message_comments_data(roleplay_id, message_id, options \\ []) do
+    page = Keyword.get(options, :page, 1)
+    data = Keyword.get(options, :data, [])
+
+    with {:ok, response} <- retry_request(fn ->
+      request()
+      |> Req.get(url: "/api_v0/roleplays/#{roleplay_id}/messages/#{message_id}/comments?page=#{page}")
+    end) do
+      request_data = response.body
+
+      if request_data["page"] >= request_data["pages"] do
+        data ++ request_data["comments"]
+      else
+        Process.sleep(Application.config()[:sleep_delay])
+        roleplay_message_comments_data(roleplay_id, message_id, [page: page + 1, data: data ++ request_data["comments"]])
+      end
+    end
+  end
+
+  defp character_data(character_id) do
+    with {:ok, response} <- retry_request(fn ->
+      request()
+      |> Req.get(url: "/api_v0/characters/#{character_id}")
+    end) do
+      response.body
+    end
+  end
 end
