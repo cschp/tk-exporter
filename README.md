@@ -26,12 +26,17 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
    cd tk-exporter
    ```
 
-3. Build the executable:
+3. Install dependencies:
+   ```bash
+   mix deps.get
+   ```
+
+4. Build the executable:
    ```bash
    mix escript.build
    ```
 
-4. Run the executable:
+5. Run the executable:
    ```bash
    ./tk_exporter
    ```
@@ -45,12 +50,17 @@ A tool to export user data from [Tavern-Keeper](https://www.tavern-keeper.com) b
    cd tk-exporter
    ```
 
-3. Build the executable:
+3. Install dependencies:
+   ```bash
+   mix deps.get
+   ```
+
+4. Build the executable:
    ```bash
    mix escript.build
    ```
 
-4. Run the executable:
+5. Run the executable:
    ```bash
    tk_exporter
    ```
