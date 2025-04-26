@@ -1,6 +1,7 @@
 defmodule TkExporter do
   require Logger
   alias TkExporter.Application
+  import Retry
 
   @moduledoc """
   A tool to export data from Tavern-Keeper before it shuts down.
