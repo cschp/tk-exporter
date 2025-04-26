@@ -1,6 +1,6 @@
-defmodule TkExport.CLI do
+defmodule TkExporter.CLI do
   @moduledoc """
-  Command Line Interface for TkExport
+  Command Line Interface for TkExporter
   """
 
   def main(_args) do
@@ -11,7 +11,7 @@ defmodule TkExport.CLI do
     cookie = IO.gets("Enter your Tavern-Keeper session cookie: ") |> String.trim()
     
     IO.puts("\nStarting export...")
-    TkExport.export(user_id, cookie)
+    TkExporter.export(user_id, cookie)
     IO.puts("\nExport completed! Check the 'exported-data' directory for your files.")
   end
 end 

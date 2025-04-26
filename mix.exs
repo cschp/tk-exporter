@@ -3,7 +3,7 @@ defmodule TkExport.MixProject do
 
   def project do
     [
-      app: :tk_export,
+      app: :tk_exporter,
       version: "0.1.0",
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
@@ -12,7 +12,7 @@ defmodule TkExport.MixProject do
       package: [
         maintainers: ["Your Name"],
         licenses: ["MIT"],
-        links: %{"GitHub" => "https://github.com/yourusername/tk-export"}
+        links: %{"GitHub" => "https://github.com/cschp/tk-exporter"}
       ],
       escript: [main_module: TkExport.CLI]
     ]
